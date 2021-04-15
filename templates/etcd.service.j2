@@ -1,7 +1,27 @@
 [Unit]
-Description=Etcd Server
-After=network.target
+Description=etcd server
+Documentation=https://github.com/etcd-io/etcd
+Wants=network-online.target network.target
+After=network-online.target
 
+{% if etcd_use_podman %}
+[Service]
+Environment=ETCD_IMAGE=quay.io/coreos/etcd:{{etcd_version}}
+Type=exec
+ExecStartPre=/bin/mkdir -p {{etcd_cluster_data_dir}}
+ExecStartPre=-/usr/local/bin/podman rm etcd
+ExecStart=/usr/local/bin/podman run --name etcd \
+--env-file /etc/etcd/etcd.conf \
+--network host \
+--volume {{etcd_cluster_data_dir}}:{{etcd_cluster_data_dir}}:rw,Z \
+--volume {{etcd_cluster_pki_dir}}:{{etcd_cluster_pki_dir}}:ro,Z \
+${ETCD_IMAGE}
+ExecStop=/usr/local/bin/podman stop etcd
+Restart=on-failure
+RestartSec=10s
+TimeoutStartSec=0
+LimitNOFILE=40000
+{% else %}
 [Service]
 Type=notify
 User={{etcd_user}}
@@ -11,6 +31,7 @@ EnvironmentFile=-/etc/etcd/etcd.conf
 ExecStart=/bin/bash -c "GOMAXPROCS=$(nproc) {{etcd_install_dir}}/etcd"
 Restart=on-failure
 LimitNOFILE=65536
+{% endif %}
 
 [Install]
 WantedBy=multi-user.target
